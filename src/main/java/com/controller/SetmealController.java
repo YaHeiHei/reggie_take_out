@@ -12,6 +12,9 @@ import com.service.SetmealService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,6 +40,7 @@ public class SetmealController {
      * @param setmealDto
      * @return
      */
+    @CacheEvict(value = "setmealCache",allEntries = true)//spring框架的注解删除缓存的方法，将一条或者多条数据从缓存中删除，allEntries参数为true时，清除缓存是清除当前value值空间下的所有缓存数据
     @PostMapping()
     public R<String> save(@RequestBody SetmealDto setmealDto) {
         log.info("套餐信息" + setmealDto);
@@ -101,6 +105,7 @@ public class SetmealController {
      * @param setmealDto
      * @return
      */
+    @CachePut(value = "setmealCache",key="#setmealDto.categoryId+'_'+setmealDto.status")//spring框架的添加缓存的注解，将方法执行返回值放入缓存的方法
     @PutMapping()
     public R<String> update(@RequestBody SetmealDto setmealDto) {
         setmealService.updateWithDish(setmealDto);
@@ -113,6 +118,7 @@ public class SetmealController {
      * @param ids
      * @return
      */
+    @CacheEvict(value = "setmealCache",allEntries = true)//spring框架的注解删除缓存的方法，将一条或者多条数据从缓存中删除，allEntries参数为true时，清除缓存是清除当前value值空间下的所有缓存数据
     @DeleteMapping()
     public R<String> delete(@RequestParam List<Long> ids) {
         setmealService.deleteWithDish(ids);
@@ -126,13 +132,19 @@ public class SetmealController {
      * @param ids
      * @return
      */
+    @CacheEvict(value = "setmealCache",allEntries = true)//spring框架的注解删除缓存的方法，将一条或者多条数据从缓存中删除，allEntries参数为true时，清除缓存是清除当前value值空间下的所有缓存数据
     @PostMapping("/status/{status}")
     public R<String> updateStatus(@PathVariable String status, @RequestParam List<Long> ids) {
         setmealService.updateStatus(status, ids);
         return R.success("修改成功");
     }
 
-
+    /**
+     * 查询所有的套餐并返回
+     * @param setmeal
+     * @return
+     */
+    @Cacheable(value = "setmealCache",key = "#setmeal.categoryId+'_'+#setmeal.status")//spring框架的注解存入缓存的方法，这个注解会在方法执行前查看缓存中是否有数据，如果有则返回如果没有那就执行下面的方法，并且把结果存入缓存中
     @GetMapping("/list")
     public R<List<Setmeal>> list(Setmeal setmeal) {
         LambdaQueryWrapper<Setmeal> lambdaQueryWrapper = new LambdaQueryWrapper<>();

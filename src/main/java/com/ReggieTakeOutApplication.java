@@ -5,6 +5,7 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.web.servlet.ServletComponentScan;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @Slf4j
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @MapperScan("com/mapper")
 @ServletComponentScan//加这个注解可以让spring扫描到servlet的过滤器
 @EnableTransactionManagement//开始Springboot的事务注解支持
+@EnableCaching//开启srping缓存注解功能
 public class ReggieTakeOutApplication {
 
     public static void main(String[] args) {

@@ -14,12 +14,13 @@ import com.service.DishService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -41,40 +42,41 @@ public class DishController {
 
     /**
      * 新增菜品
+     *
      * @param dishDto
      * @return
      */
+    @CacheEvict(value = "dishCache", allEntries = true)
+//spring框架的注解删除缓存的方法，将一条或者多条数据从缓存中删除，allEntries参数为true时，清除缓存是清除当前value值空间下的所有缓存数据
     @PostMapping()
-    public R<String> save(@RequestBody DishDto dishDto){
-        //新增菜品前删除redis中对应的菜品数据
-        String key = "dish_"+dishDto.getCategoryId()+"_"+dishDto.getStatus();
-        redisTemplate.delete(key);
+    public R<String> save(@RequestBody DishDto dishDto) {
         dishService.saveWithFlavor(dishDto);
         return R.success("添加成功");
     }
 
     /**
      * 菜品分页查询，可加name条件
+     *
      * @param page
      * @param pageSize
      * @param name
      * @return
      */
     @GetMapping("/page")
-    public R<Page> page(@RequestParam Integer page,@RequestParam Integer pageSize,String name){
+    public R<Page> page(@RequestParam Integer page, @RequestParam Integer pageSize, String name) {
         //分页构造器
-        Page<Dish>  pageIn = new Page<>(page,pageSize);
+        Page<Dish> pageIn = new Page<>(page, pageSize);
         //条件构造器
         LambdaQueryWrapper<Dish> dishLambdaQueryWrapper = new LambdaQueryWrapper<>();
         //添加name条件
-        dishLambdaQueryWrapper.like(name!=null,Dish::getName,name);
+        dishLambdaQueryWrapper.like(name != null, Dish::getName, name);
         //添加排序条件
         dishLambdaQueryWrapper.orderByDesc(Dish::getUpdateTime);
         //进行分页查询
-        dishService.page(pageIn,dishLambdaQueryWrapper);
+        dishService.page(pageIn, dishLambdaQueryWrapper);
         //对象拷贝，因为Dish这个属性里缺少categoryName属性值所以要把分页查询出来的Dish拷贝到DishDto中
         Page<DishDto> pageInFo = new Page<>();
-        BeanUtils.copyProperties(pageIn,pageInFo,"records"); //第一个参数是被拷贝对象，第二个是拷贝对象，第三个是被拷贝对象2中需要忽略的属性
+        BeanUtils.copyProperties(pageIn, pageInFo, "records"); //第一个参数是被拷贝对象，第二个是拷贝对象，第三个是被拷贝对象2中需要忽略的属性
         //处理page中封装数据的Records
         List<Dish> records = pageIn.getRecords();
 /*        for (Dish record : records) {
@@ -85,14 +87,14 @@ public class DishController {
             String categoryName = category.getName();//拿到分类的名字
             dishDto.setCategoryName(categoryName);//把对应的分类名称放进去
         }*/
-       List<DishDto> list =  records.stream().map((item)->{
-            DishDto dishDto= new DishDto();
-            BeanUtils.copyProperties(item,dishDto);//把对应的属性拷贝进去
+        List<DishDto> list = records.stream().map((item) -> {
+            DishDto dishDto = new DishDto();
+            BeanUtils.copyProperties(item, dishDto);//把对应的属性拷贝进去
             Long categoryId = item.getCategoryId();//获取分类id
             Category category = categoryService.getById(categoryId);//得到分类对象
             String categoryName = category.getName();//拿到分类的名字
             dishDto.setCategoryName(categoryName);//把对应的分类名称放进去
-           return dishDto;
+            return dishDto;
         }).collect(Collectors.toList());
         pageInFo.setRecords(list);
         return R.success(pageInFo);
@@ -100,60 +102,61 @@ public class DishController {
 
     /**
      * 根据id查询菜品信息与口味信息
+     *
      * @param id
      * @return
      */
     @GetMapping("/{id}")
-    public R<DishDto> geiById(@PathVariable Long id){
+    public R<DishDto> geiById(@PathVariable Long id) {
         DishDto dishDto = dishService.getByIdWithFlavor(id);
         return R.success(dishDto);
     }
 
     /**
      * 修改菜品与口味信息
+     *
      * @param dishDto
      * @return
      */
+    @CachePut(value = "dishCache", key = "#dishDto.categoryId+'_'+dishDto.status")//spring框架的添加缓存的注解，将方法执行返回值放入缓存的方法
     @PutMapping()
-    public R<String> update(@RequestBody DishDto dishDto){
-        //修改菜品前删除redis中对应的菜品数据
-        String key = "dish_"+dishDto.getCategoryId()+"_"+dishDto.getStatus();
-        redisTemplate.delete(key);
+    public R<String> update(@RequestBody DishDto dishDto) {
         dishService.updateWithFlavor(dishDto);
         return R.success("添加成功");
     }
 
     /**
      * 根据id删除菜品与对应的口味信息
+     *
      * @param ids
      * @return
      */
+    @CacheEvict(value = "dishCache", allEntries = true)
+//spring框架的注解删除缓存的方法，将一条或者多条数据从缓存中删除，allEntries参数为true时，清除缓存是清除当前value值空间下的所有缓存数据
     @DeleteMapping()
-    public R<String> delete(@RequestParam List<Long> ids){
-        //清理redis中所有的菜品数据，防止删除菜品后出现错误
-        Set keys = redisTemplate.keys("dish_*");
-        redisTemplate.delete(keys);
+    public R<String> delete(@RequestParam List<Long> ids) {
         dishService.deleteWithFlavor(ids);
         return R.success("删除成功");
     }
 
     /**
      * 根据id修改菜品状态，批量也可以单个
+     *
      * @param status
      * @param ids
      * @return
      */
+    @CacheEvict(value = "dishCache", allEntries = true)
+//spring框架的注解删除缓存的方法，将一条或者多条数据从缓存中删除，allEntries参数为true时，清除缓存是清除当前value值空间下的所有缓存数据
     @PostMapping("/status/{status}")
-    public R<String> updateStatus(@PathVariable String status,@RequestParam List<Long> ids){
-        //清理redis中所有的菜品数据，防止修改状态后出现错误
-        Set keys = redisTemplate.keys("dish_*");
-        redisTemplate.delete(keys);
-        dishService.updateStatus(status,ids);
+    public R<String> updateStatus(@PathVariable String status, @RequestParam List<Long> ids) {
+        dishService.updateStatus(status, ids);
         return R.success("修改成功");
     }
 
     /**
      * 根据条件查询对应的菜品信息
+     *
      * @param dish
      * @return
      */
@@ -167,35 +170,26 @@ public class DishController {
         List<Dish> list = dishService.list(lambdaQueryWrapper);
         return R.success(list);
     }*/
+    @Cacheable(value = "dishCache", key = "#dish.categoryId+'_'+#dish.status")
+//spring框架的注解存入缓存的方法，这个注解会在方法执行前查看缓存中是否有数据，如果有则返回如果没有那就执行下面的方法，并且把结果存入缓存中
     @GetMapping("/list")
-    public R<List<DishDto>> list(Dish dish){
-        List<DishDto> dishDtoList;
-        String key = "dish_"+dish.getCategoryId()+"_"+dish.getStatus();
-        //先从redis中获取数据
-        dishDtoList = (List<DishDto>) redisTemplate.opsForValue().get(key);
-        if (dishDtoList!=null){
-            //说明reids中有菜品数据，直接返回reids中的数据，不再查询数据库数据，减少数据库压力
-            return R.success(dishDtoList);
-        }
-        //redis中没有查出数据，从数据库中查找数据，并且田添加到redis中
+    public R<List<DishDto>> list(Dish dish) {
         //构造查询条件
         LambdaQueryWrapper<Dish> dishlambdaQueryWrapper = new LambdaQueryWrapper<>();
-        dishlambdaQueryWrapper.eq(dish.getCategoryId()!=null,Dish::getCategoryId,dish.getCategoryId());
-        dishlambdaQueryWrapper.eq(Dish::getStatus,1);
+        dishlambdaQueryWrapper.eq(dish.getCategoryId() != null, Dish::getCategoryId, dish.getCategoryId());
+        dishlambdaQueryWrapper.eq(Dish::getStatus, 1);
         dishlambdaQueryWrapper.orderByAsc(Dish::getSort).orderByDesc(Dish::getUpdateTime);
         List<Dish> dishList = dishService.list(dishlambdaQueryWrapper);
-        dishDtoList= dishList.stream().map((item)->{
+        List<DishDto> dishDtoList = dishList.stream().map((item) -> {
             DishDto dishDto = new DishDto();
-            BeanUtils.copyProperties(item,dishDto);
+            BeanUtils.copyProperties(item, dishDto);
             Long dishId = item.getId();
             LambdaQueryWrapper<DishFlavor> dishFlavorLambdaQueryWrapper = new LambdaQueryWrapper<>();
-            dishFlavorLambdaQueryWrapper.eq(DishFlavor::getDishId,dishId);
+            dishFlavorLambdaQueryWrapper.eq(DishFlavor::getDishId, dishId);
             List<DishFlavor> dishFlavorList = dishFlavorService.list(dishFlavorLambdaQueryWrapper);
             dishDto.setFlavors(dishFlavorList);
             return dishDto;
         }).collect(Collectors.toList());
-        //把数据添加到redis中
-        redisTemplate.opsForValue().set(key,dishList,60, TimeUnit.MINUTES);
         //返回数据
         return R.success(dishDtoList);
     }
